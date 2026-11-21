@@ -15,6 +15,12 @@ class Enchantment:
     bonus_defense: float
     bonus_price: int
 
+    @classmethod
+    def by_code(cls, code: str) -> Enchantment:
+        for ench in ALL_ENCHANTMENTS:
+            if ench.code == code:
+                return ench
+        raise UnknownCodeException("Зачарование", code)
 
 
 SHARP = Enchantment("sharp", "Острое", 3, 0.0, 20)

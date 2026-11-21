@@ -3,7 +3,7 @@ from __future__ import annotations
 import random
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Optional, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, Sequence, TypeVar
 
 if TYPE_CHECKING:
     from .entities import Combatant
@@ -61,6 +61,10 @@ class Side(Enum):
 class EventType(Enum):
     HIT = "HIT"
     CRITICAL_HIT = "CRITICAL_HIT"
+    EVADE = "EVADE"
+    ABSORB = "ABSORB"
+    POWER_STRIKE = "POWER_STRIKE"
+    DEFEND = "DEFEND"
     DEATH = "DEATH"
 
 
@@ -110,5 +114,6 @@ class Rewards:
 class ExpeditionReport:
     seed: int
     location_code: str
+    tactic_code: str
     battle: BattleReport
     rewards: Rewards

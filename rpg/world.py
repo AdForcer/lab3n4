@@ -3,9 +3,19 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Sequence
 
-from .combat import Battle
+from .combat import BalancedTactic, Battle, Tactic
 from .core import Dice, ExpeditionReport, Outcome, Rewards, UnknownCodeException
-from .entities import Dragon, Enemy, Goblin, Hero, Skeleton
+from .entities import (
+    ArmoredEnemy,
+    Dragon,
+    Enemy,
+    Goblin,
+    HauntedWeapon,
+    Hero,
+    LegendaryEnemy,
+    Skeleton,
+    WindfuryEnemy,
+)
 from .items import DefaultCatalog, Item, ItemCatalog
 
 
@@ -14,6 +24,9 @@ class Location(ABC):
 
     LOOT_CHANCE = 0.6
     ENCHANT_CHANCE = 0.3
+    ELITE_CHANCE = 0.2
+    DOUBLE_ELITE_CHANCE = 0.25
+    ARMORED_CHANCE = 0.3
 
     def __init__(self, code: str, display_name: str, recommended_level: int, catalog: ItemCatalog) -> None:
         self._code = code
@@ -22,25 +35,49 @@ class Location(ABC):
         self._catalog = catalog
 
     @abstractmethod
-    def _create_enemy(self) -> Enemy: ...
+    def _create_enemy(self) -> Enemy:
+        ...
 
     @abstractmethod
-    def _get_loot_table(self) -> Sequence[str]: ...
+    def _get_loot_table(self) -> Sequence[str]:
+        ...
 
-    def explore(self, hero: Hero, seed: Optional[int] = None) -> ExpeditionReport:
+    def explore(
+        self,
+        hero: Hero,
+        tactic: Optional[Tactic] = None,
+        seed: Optional[int] = None,
+    ) -> ExpeditionReport:
         dice = Dice.get_instance()
+        actual_tactic = tactic if tactic is not None else BalancedTactic()
         actual_seed = seed if seed is not None else dice.next_seed()
         dice.reseed(actual_seed)
 
-        hero.restore_health()
+        hero.rest()
         enemy = self._create_enemy()
-        battle = Battle(hero, enemy).run()
+        if dice.chance(self.ELITE_CHANCE):
+            enemy = self._make_elite(enemy, dice)
+
+        battle = Battle(hero, enemy, actual_tactic).run()
         rewards = (
             self._reward(hero, enemy, dice)
             if battle.outcome == Outcome.VICTORY
             else self._punish(hero)
         )
-        return ExpeditionReport(actual_seed, self._code, battle, rewards)
+        return ExpeditionReport(actual_seed, self._code, actual_tactic.code, battle, rewards)
+
+    def _make_elite(self, enemy: Enemy, dice: Dice) -> Enemy:
+        both = dice.chance(self.DOUBLE_ELITE_CHANCE)
+        if dice.chance(0.5):
+            enemy = LegendaryEnemy(enemy)
+            if both:
+                enemy = WindfuryEnemy(enemy)
+        else:
+            enemy = WindfuryEnemy(enemy)
+            if both:
+                enemy = LegendaryEnemy(enemy)
+
+        return ArmoredEnemy(enemy) if dice.chance(self.ARMORED_CHANCE) else enemy
 
     def _reward(self, hero: Hero, enemy: Enemy, dice: Dice) -> Rewards:
         experience = enemy.get_experience_reward()
@@ -90,6 +127,32 @@ class Forest(Location):
 
     def _get_loot_table(self) -> Sequence[str]:
         return (DefaultCatalog.GOBLIN_CLEAVER, DefaultCatalog.HUNTING_BOW, DefaultCatalog.LEATHER_ARMOR)
+
+
+class HauntedManor(Location):
+    """Локация, использующая Адаптер HauntedWeapon для превращения оружия во врага."""
+
+    CODE = "haunted-manor"
+    HAUNTED_WEAPONS = (
+        DefaultCatalog.IRON_SWORD,
+        DefaultCatalog.ELVEN_BOW,
+        DefaultCatalog.EMBER_STAFF,
+    )
+
+    def __init__(self, catalog: ItemCatalog) -> None:
+        super().__init__(self.CODE, "Проклятый особняк", 2, catalog)
+
+    def _create_enemy(self) -> Enemy:
+        weapon = self._catalog.create_weapon(Dice.get_instance().pick(self.HAUNTED_WEAPONS))
+        return HauntedWeapon(weapon)
+
+    def _get_loot_table(self) -> Sequence[str]:
+        return (
+            DefaultCatalog.IRON_SWORD,
+            DefaultCatalog.ELVEN_BOW,
+            DefaultCatalog.EMBER_STAFF,
+            DefaultCatalog.PLATE_ARMOR,
+        )
 
 
 class Crypt(Location):
